@@ -1,0 +1,4 @@
+project_id = "mksucmbgejucmbuvrrij"
+
+[functions.convert-script]
+verify_jwt = false
