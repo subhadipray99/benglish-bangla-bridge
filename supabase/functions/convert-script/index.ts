@@ -1,13 +1,17 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
 };
 
-serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
+Deno.serve(async (req: Request) => {
+  if (req.method === "OPTIONS") {
+    return new Response(null, {
+      status: 200,
+      headers: corsHeaders,
+    });
   }
 
   try {
@@ -22,12 +26,14 @@ serve(async (req) => {
       throw new Error('Text and language pair are required');
     }
 
-    const systemPrompts = {
+    const systemPrompts: Record<string, string> = {
       'benglish-bangla': `You are a Benglish to Bangla script converter. Convert Bengali words written in English/Latin letters into proper Bangla script. DO NOT translate English words - keep them as-is. Only convert Bengali words that are written using English letters into Bangla script. Preserve all punctuation, tone, structure, and formatting exactly as given. Handle informal, poetic, or conversational text naturally.`,
-      'hinglish-hindi': `You are a Hinglish to Hindi script converter. Convert Hindi words written in English/Latin letters into proper Devanagari/Hindi script. DO NOT translate English words - keep them as-is. Only convert Hindi words that are written using English letters into Hindi script. Preserve all punctuation, tone, structure, and formatting exactly as given. Handle informal, poetic, or conversational text naturally.`
+      'hinglish-hindi': `You are a Hinglish to Hindi script converter. Convert Hindi words written in English/Latin letters into proper Devanagari/Hindi script. DO NOT translate English words - keep them as-is. Only convert Hindi words that are written using English letters into Hindi script. Preserve all punctuation, tone, structure, and formatting exactly as given. Handle informal, poetic, or conversational text naturally.`,
+      'benglish-english': `You are a Benglish to English translator. Convert Bengali words written in English/Latin letters into proper formal English translation. Translate the complete meaning accurately while maintaining the tone and context. Preserve formatting. If there are actual English words mixed in, keep them as they are.`,
+      'hinglish-english': `You are a Hinglish to English translator. Convert Hindi words written in English/Latin letters into proper formal English translation. Translate the complete meaning accurately while maintaining the tone and context. Preserve formatting. If there are actual English words mixed in, keep them as they are.`
     };
 
-    const systemPrompt = systemPrompts[languagePair as keyof typeof systemPrompts] || systemPrompts['benglish-bangla'];
+    const systemPrompt = systemPrompts[languagePair] || systemPrompts['benglish-bangla'];
 
     const response = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${GEMINI_API_KEY}`,
