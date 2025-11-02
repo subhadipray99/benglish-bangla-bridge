@@ -19,7 +19,8 @@ Deno.serve(async (req: Request) => {
     const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY');
 
     if (!GEMINI_API_KEY) {
-      throw new Error('GEMINI_API_KEY is not configured');
+      console.error('GEMINI_API_KEY environment variable not found');
+      throw new Error('Grammar checker is not properly configured. Please contact support.');
     }
 
     if (!text) {
