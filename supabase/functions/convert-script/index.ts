@@ -59,7 +59,7 @@ Deno.serve(async (req: Request) => {
     if (!response.ok) {
       const errorData = await response.json();
       console.error('Gemini API error:', errorData);
-      throw new Error('Failed to convert text');
+      throw new Error(`Gemini API error: ${response.status}`);
     }
 
     const data = await response.json();
