@@ -18,7 +18,12 @@ Deno.serve(async (req: Request) => {
     const { text, languagePair } = await req.json();
     const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY');
 
+    console.log('GEMINI_API_KEY exists:', !!GEMINI_API_KEY);
+    console.log('Text:', text?.substring(0, 50));
+    console.log('Language pair:', languagePair);
+
     if (!GEMINI_API_KEY) {
+      console.error('GEMINI_API_KEY not found in environment');
       throw new Error('GEMINI_API_KEY is not configured');
     }
 
@@ -35,35 +40,47 @@ Deno.serve(async (req: Request) => {
 
     const systemPrompt = systemPrompts[languagePair] || systemPrompts['benglish-bangla'];
 
+    const requestBody = {
+      contents: [{
+        parts: [{
+          text: `${systemPrompt}\n\nConvert this text:\n${text}`
+        }]
+      }],
+      generationConfig: {
+        temperature: 0.3,
+        maxOutputTokens: 2048,
+      }
+    };
+
+    console.log('Calling Gemini API...');
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${GEMINI_API_KEY}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`,
       {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          contents: [{
-            parts: [{
-              text: `${systemPrompt}\n\nConvert this text:\n${text}`
-            }]
-          }],
-          generationConfig: {
-            temperature: 0.3,
-            maxOutputTokens: 2048,
-          }
-        }),
+        body: JSON.stringify(requestBody),
       }
     );
 
+    console.log('Gemini response status:', response.status);
+
     if (!response.ok) {
       const errorData = await response.json();
-      console.error('Gemini API error:', errorData);
-      throw new Error(`Gemini API error: ${response.status}`);
+      console.error('Gemini API error:', JSON.stringify(errorData));
+      throw new Error(`Gemini API error: ${response.status} - ${JSON.stringify(errorData)}`);
     }
 
     const data = await response.json();
+    console.log('Gemini response received');
+    
     const convertedText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+
+    if (!convertedText) {
+      console.error('No text in response:', JSON.stringify(data));
+      throw new Error('No converted text received from API');
+    }
 
     return new Response(
       JSON.stringify({ convertedText }),
