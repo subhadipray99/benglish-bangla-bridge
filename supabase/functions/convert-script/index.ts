@@ -16,26 +16,35 @@ Deno.serve(async (req: Request) => {
 
   try {
     const { text, languagePair } = await req.json();
-    const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY');
-
-    console.log('GEMINI_API_KEY exists:', !!GEMINI_API_KEY);
-    console.log('Text:', text?.substring(0, 50));
-    console.log('Language pair:', languagePair);
-
-    if (!GEMINI_API_KEY) {
-      console.error('GEMINI_API_KEY not found in environment');
-      throw new Error('GEMINI_API_KEY is not configured');
+    
+    if (!text || !languagePair) {
+      return new Response(
+        JSON.stringify({ error: 'Text and language pair are required' }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        },
+      );
     }
 
-    if (!text || !languagePair) {
-      throw new Error('Text and language pair are required');
+    const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY');
+    
+    if (!GEMINI_API_KEY) {
+      console.error('GEMINI_API_KEY environment variable not found');
+      return new Response(
+        JSON.stringify({ error: 'GEMINI_API_KEY not configured' }),
+        {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        },
+      );
     }
 
     const systemPrompts: Record<string, string> = {
-      'benglish-bangla': `You are a Benglish to Bangla script converter. Convert Bengali words written in English/Latin letters into proper Bangla script. DO NOT translate English words - keep them as-is. Only convert Bengali words that are written using English letters into Bangla script. Preserve all punctuation, tone, structure, and formatting exactly as given. Handle informal, poetic, or conversational text naturally.`,
-      'hinglish-hindi': `You are a Hinglish to Hindi script converter. Convert Hindi words written in English/Latin letters into proper Devanagari/Hindi script. DO NOT translate English words - keep them as-is. Only convert Hindi words that are written using English letters into Hindi script. Preserve all punctuation, tone, structure, and formatting exactly as given. Handle informal, poetic, or conversational text naturally.`,
-      'benglish-english': `You are a Benglish to English translator. Convert Bengali words written in English/Latin letters into proper formal English translation. Translate the complete meaning accurately while maintaining the tone and context. Preserve formatting. If there are actual English words mixed in, keep them as they are.`,
-      'hinglish-english': `You are a Hinglish to English translator. Convert Hindi words written in English/Latin letters into proper formal English translation. Translate the complete meaning accurately while maintaining the tone and context. Preserve formatting. If there are actual English words mixed in, keep them as they are.`
+      'benglish-bangla': 'Convert Bengali words written in English/Latin letters into proper Bangla script. DO NOT translate English words - keep them as-is. Only convert Bengali words.',
+      'hinglish-hindi': 'Convert Hindi words written in English/Latin letters into proper Devanagari/Hindi script. DO NOT translate English words - keep them as-is. Only convert Hindi words.',
+      'benglish-english': 'Translate Benglish (Bengali in English/Latin letters) into proper English translation.',
+      'hinglish-english': 'Translate Hinglish (Hindi in English/Latin letters) into proper English translation.'
     };
 
     const systemPrompt = systemPrompts[languagePair] || systemPrompts['benglish-bangla'];
@@ -43,43 +52,49 @@ Deno.serve(async (req: Request) => {
     const requestBody = {
       contents: [{
         parts: [{
-          text: `${systemPrompt}\n\nConvert this text:\n${text}`
+          text: `${systemPrompt}\n\nConvert: ${text}`
         }]
       }],
       generationConfig: {
         temperature: 0.3,
-        maxOutputTokens: 2048,
+        maxOutputTokens: 1024,
       }
     };
 
-    console.log('Calling Gemini API...');
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(requestBody),
-      }
-    );
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+    
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(requestBody),
+    });
 
-    console.log('Gemini response status:', response.status);
+    const responseData = await response.json();
 
     if (!response.ok) {
-      const errorData = await response.json();
-      console.error('Gemini API error:', JSON.stringify(errorData));
-      throw new Error(`Gemini API error: ${response.status} - ${JSON.stringify(errorData)}`);
+      console.error('API Error:', response.status, responseData);
+      return new Response(
+        JSON.stringify({ error: `API Error: ${responseData?.error?.message || 'Unknown error'}` }),
+        {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        },
+      );
     }
 
-    const data = await response.json();
-    console.log('Gemini response received');
-    
-    const convertedText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    const convertedText = responseData.candidates?.[0]?.content?.parts?.[0]?.text || '';
 
     if (!convertedText) {
-      console.error('No text in response:', JSON.stringify(data));
-      throw new Error('No converted text received from API');
+      console.error('No text in response:', responseData);
+      return new Response(
+        JSON.stringify({ error: 'No response from API' }),
+        {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        },
+      );
     }
 
     return new Response(
@@ -89,7 +104,7 @@ Deno.serve(async (req: Request) => {
       },
     );
   } catch (error) {
-    console.error('Error in convert-script function:', error);
+    console.error('Error:', error);
     return new Response(
       JSON.stringify({ error: error instanceof Error ? error.message : 'Unknown error' }),
       {
